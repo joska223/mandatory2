@@ -1,25 +1,72 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
+build-backend = "uv_build"
+
+requires = [
+  "uv-build>=0.8,<0.9",
+]
 
 [project]
-name = "mandatory2"
-version = "0.1.0"
-description = "1D spectral Galerkin scaffolding for ODE/PDEs on an interval"
+name = "matmek4270-mandatory2"
+version = "1.0.0"
+description = "Mandatory assignment 2 for MAT-MEK4270 course - Computational methods in mechanics"
 readme = "README.md"
-requires-python = ">=3.10"
-license = { file = "LICENSE" }
+license = {file = "LICENSE"}
 authors = [
-  { name = "MATMEK-4270 course" }
+    {name = "Mikael Mortensen"}
 ]
+keywords = ["numerical-methods", "mechanics", "computational-mathematics", "finite-difference"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Education",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Education",
+]
+requires-python = ">=3.12"
 dependencies = [
-  "numpy>=1.26",
-  "scipy>=1.11",
-  "sympy>=1.12"
+    "numpy>=2.1",
+    "sympy>=1.14",
+    "scipy>=1.17.1",
+    "pytest-xdist[psutil]>=3.8",
 ]
 
-[tool.setuptools]
-# Treat the top-level scripts as modules so they can be imported if desired
-py-modules = [
-  "galerkin"
+[dependency-groups]
+dev = [
+    "matplotlib>=3.9.3",
+    "ipython>=8.0",
+    "black>=23.0",
+    "isort>=5.0",
+    "ty>=0.0.64",
 ]
+
+[project.urls]
+Homepage = "https://www.uio.no/studier/emner/matnat/math/MAT-MEK4270/"
+Repository = "https://github.com/MATMEK-4270/mandatory2"
+
+[tool.uv.build-backend]
+module-name = "mandatory2"
+module-root = ""
+namespace = true
+
+[tool.pytest.ini_options]
+testpaths = ["."]
+
+[tool.black]
+line-length = 88
+target-version = ['py312']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.venv
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88

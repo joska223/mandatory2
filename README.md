@@ -8,52 +8,49 @@ Please see instructions in [the book](https://matmek-4270.github.io/matmek4270-b
 
 # Some further instructions for this repo
 
-This repository contains a small framework in `galerkin.py` for assembling mass/stiffness-like operators and projecting/solving with different polynomial/trigonometric bases and boundary-condition lifts. The code is using classes for reuse of code and clarity, but is kept as simple as possible for educational purposes.
+This repository contains a small framework in `galerkin.py` for assembling mass/stiffness-like operators and projecting/solving with different polynomial and trigonometric bases and their boundary-condition lifts. Classes are used for code reuse and clarity, kept as simple as possible for educational purposes.
 
-Big picture (architecture)
-- Mapping helpers: `map_reference_domain`, `map_true_domain`, `map_expression_true_domain` convert points/expressions between the true domain and a basis-specific reference domain; always use these when mixing domains.
-- Base space: `FunctionSpace(N, domain)` defines common behavior: mesh generation, evaluating basis and derivatives, numerical inner products, and a generic mass matrix via numerical quad.
-- Concrete spaces
-  - `Legendre` and `Chebyshev` use orthogonal polynomials on reference `(-1, 1)`; `eval` uses fast `np.polynomial.legendre.legval` / `chebval` on mapped coordinates.
-  - `Trigonometric` base has reference `(0, 1)` and adds a boundary lift in `eval` via `self.B.Xl(X)`; `Sines` is implemented, `Cosines` is a placeholder.
-  - `Composite` spaces enforce boundary conditions via a lift `B` and a stencil matrix `S`, e.g. Dirichlet: ψ_i = Q_i − Q_{i+2}. Mass is assembled as `S · M · S^T` where `M` is diagonal in the orthogonal basis. Implementations include `DirichletChebyshev` (done) and placeholders for Legendre/Chebyshev Neumann and Legendre Dirichlet.
-- Boundary lifts: `Dirichlet` and `Neumann` construct an affine or quadratic function `B.x` on the physical domain and its reference-evaluator `B.Xl`. Solutions are represented as u(x) = Σ û_i ψ_i(x) + B.x.
-- Weak forms: `BasisFunction`, `TrialFunction`, `TestFunction` provide a tiny domain-specific language (DSL). `inner(Trial.diff(k), Test)` builds derivative-weighted bilinear forms; `assemble_generic_matrix` integrates with proper weights and symmetry.
+## How to pass this assignment
 
-Key files and examples
-- `galerkin.py` is the only source file and contains:
-  - Example workflows: `test_project`, `test_convection_diffusion`, `test_helmholtz` show projection and PDE assembly patterns.
-  - Space definitions and utilities listed above.
+There is no manual grading. The assignment is passed once your fork of this repository shows a **green badge**, i.e. `pytest galerkin.py` runs `test_project`, `test_convection_diffusion` and `test_helmholtz` without errors on GitHub Actions.
 
-Developer workflows
-- Dependencies: numpy, scipy, sympy. Install them before running.
-- Run examples/tests: execute `python galerkin.py` to run the three demo tests in `__main__`.
-- Assemble a PDE (pattern):
-  - Choose space `V = DirichletChebyshev(N, domain, bc)` (or similar).
-  - Define trial/test: `u = TrialFunction(V)`, `v = TestFunction(V)`.
-  - Build operator: e.g., `A = inner(u.diff(2), v) + inner(u, v)`.
-  - Build RHS: subtract lift contribution, e.g., `b = inner(f - (V.B.x.diff(x, 2) + V.B.x), v)`.
-  - Solve for coefficients: `np.linalg.solve(A, b)` (or `sparse.linalg.spsolve`).
+Check locally before pushing:
+```bash
+uv sync
+uv run ty check galerkin.py   # optional, but should pass — see "Type hints" below
+uv run pytest -v galerkin.py
+# or simply:
+uv run python galerkin.py
+```
 
-Project conventions and gotchas
-- Reference domains: Legendre/Chebyshev map to `(-1, 1)`; Trigonometric maps to `(0, 1)`. Always map x before polynomial evaluation (`eval` methods handle this).
-- Coefficient lengths: simple spaces use N+1 coefficients; composite spaces expand with stencil `S` of shape `(N+1, N+3)` and use diagonal `M` of length `N+3` in the orthogonal basis.
-- Chebyshev weighting: `inner_product` performs the substitution x = cos(θ) and integrates on `[0, π]` to handle the weight 1/√(1−x²); do not use uniform quad there.
-- Derivatives of trigonometric bases: Sine derivative scale is `((j+1)π)^k` with alternating sign for odd k; see `Sines.derivative_basis_function` for the exact pattern.
-- Boundary lifts: `V.eval(uh, xj)` returns `P @ uh + V.B.Xl(X)` for spaces with lifts. When forming `b`, include the differential operator applied to `B.x` on the RHS, as shown in tests.
+## What you need to implement
 
-Placeholders intentionally left for students (do not remove without intent)
-- `Cosines`, `DirichletLegendre.basis_function`, `NeumannLegendre`, `NeumannChebyshev`, and some `L2_norm_sq`/`mass_matrix` overrides are `NotImplemented`. Mirror the implemented counterparts:
-  - Cosines similar to Sines but with cos(kπx) including the k=0 mode handling and L2 norms.
-  - Dirichlet/Neumann Legendre/Chebyshev composite spaces follow the stencil S approach used in `DirichletChebyshev` and lifting via `B`.
-  - The stencil matrix for the Neumann conditions can be derived using similar logic to the Dirichlet case, ensuring the homogeneous derivative conditions are met at the boundaries. For this use the value of the derivative at the boundary, see [lecture 11](https://matmek-4270.github.io/matmek4270-book/lecture11.html#neumann-boundary-conditions).
-- The demos in `__main__` assume these will be implemented; until then, some tests will fail. Use `FunctionSpace.mass_matrix()` as a generic fallback if you don’t provide a closed-form one.
+`galerkin.py` marks unfinished code with two different exceptions, and they mean different things:
 
-External APIs and patterns to reuse
-- SymPy: build exact expressions and derivatives (`x = sp.Symbol("x")`), then `sp.lambdify` for numerical integration and evaluation.
-- SciPy: `scipy.integrate.quad` is used; for Chebyshev, pass `weight='alg', wvar=(-0.5, -0.5)`.
-- Numpy polynomials: prefer `np.polynomial.legendre.legval`/`chebval` for fast evaluation of polynomial series.
+- **`NotImplementedError`** marks a concrete method for you to fill in — mirror the pattern of the sibling classes/methods that are already implemented.
+- **`RuntimeError`** in `FunctionSpace.basis_function` and `FunctionSpace.derivative_basis_function` marks an *abstract* method. It is never meant to be implemented at that base-class level — only overridden by a concrete subclass, which every subclass already does (directly, or via its own `NotImplementedError` blank listed below). **Leave these two `RuntimeError`s alone.**
 
-When adding new spaces or operators
-- Subclass `FunctionSpace` (or `Composite` if enforcing BCs via stencil). Implement `basis_function(j, sympy=False)`, `derivative_basis_function(j, k)`, optional `weight`, and `eval` if you can use a faster evaluator.
-- Respect domain mappings and return shapes consistent with `(N+1,)` coefficient vectors (or stencil-expanded shapes in composite spaces).
+`FunctionSpace.reference_domain` also raises `RuntimeError`, but unlike the two above it genuinely is a blank for you to fill in — it's listed first below.
+
+Implement:
+- `FunctionSpace.reference_domain` — return the default reference domain `(-1, 1)` used by the polynomial spaces below. Nothing involving `Legendre`/`Chebyshev` works until this is filled in.
+- `Legendre.L2_norm_sq` and `Legendre.mass_matrix` — the L2 norms of the Legendre polynomials and the (diagonal) mass matrix built from them.
+- `Chebyshev.derivative_basis_function`, `Chebyshev.L2_norm_sq`, `Chebyshev.mass_matrix`, `Chebyshev.eval` — the same idea as `Legendre`, but using `np.polynomial.chebyshev` and the Chebyshev weight.
+- `Cosines` (`__init__`, `basis_function`, `derivative_basis_function`, `L2_norm_sq`) — mirror `Sines`, but with `cos(jπx)` and its `j=0` mode handled separately (its derivative vanishes identically for any order).
+- `DirichletLegendre.basis_function` — mirror `DirichletChebyshev.basis_function`, using Legendre polynomials instead of Chebyshev.
+- `NeumannLegendre` and `NeumannChebyshev` (`__init__`, `basis_function`) — composite spaces enforcing homogeneous derivative (Neumann) boundary conditions via a stencil matrix `S`, following the same pattern as `DirichletLegendre`/`DirichletChebyshev`, but solving for a stencil coefficient that makes `ψ_j'(±1) = 0`. See [lecture 11](https://matmek-4270.github.io/matmek4270-book/lecture11.html#neumann-boundary-conditions) for the boundary-derivative values to use.
+
+`FunctionSpace.eval_derivative_basis_function_all` also raises `NotImplementedError`, but it isn't called by any of the three demo tests — implement it only if you want a general way to evaluate a derivative field at many points (e.g. for plotting).
+
+## Architecture, in brief
+
+The module docstring and class docstrings in `galerkin.py` describe the architecture — mapping helpers, `FunctionSpace` and its orthogonal/trigonometric/composite subclasses, the `Dirichlet`/`Neumann` boundary lifts, and the `TrialFunction`/`TestFunction`/`inner` weak-form DSL. Start there (`python -c "help(__import__('galerkin'))"`, or just read top-to-bottom) before diving into the blanks above.
+
+## Gotchas
+
+- **Domain mapping.** Always go through `map_reference_domain`/`map_true_domain` before evaluating a basis function or its derivative — don't evaluate directly in the physical domain.
+- **Chebyshev weight.** `Chebyshev.inner_product` substitutes `x = cos(θ)` and integrates over `[0, π]` to handle the `1/√(1−x²)` weight; don't use plain `quad` on `[-1, 1]` there. `assemble_generic_matrix` instead passes `weight="alg", wvar=(-0.5, -0.5)` to `quad` for the same reason.
+- **Coefficient lengths.** Simple spaces use `N+1` coefficients; composite spaces use a stencil `S` of shape `(N+1, N+3)` and a diagonal `M` of length `N+3` in the underlying orthogonal basis.
+- **Trigonometric derivatives.** `Sines.derivative_basis_function` shows the scale/sign pattern for `((j+1)π)^k`; `Cosines` needs the analogous pattern for `(jπ)^k`, with the `j=0` mode's derivative identically zero for any order.
+- **Boundary lifts in the RHS.** When assembling `b = inner(f - operator(B.x), v)`, remember to subtract the same differential operator applied to the lift `B.x`, as shown in `test_helmholtz`/`test_convection_diffusion`.
+- **Type hints & `@overload`.** Method signatures are fully type-annotated, so they describe exactly what each blank should accept and return. `basis_function(j, sympy=False)` returns a different type depending on `sympy` — a callable when `sympy=False`, a sympy expression when `sympy=True` — which a plain type hint can't express precisely. It's declared with two `@overload` stubs (one per literal value of `sympy`), followed by the actual (untyped) implementation; only the two stubs are seen by the type checker, so it can pick the right return type at each call site instead of an imprecise union of both. Your implementation should keep `uv run ty check galerkin.py` passing — it catches a wrong return type or shape immediately, well before the (much slower) numerical tests would.
