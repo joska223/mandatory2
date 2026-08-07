@@ -13,6 +13,7 @@ weak-form DSL used together with `project` and `assemble_generic_matrix`.
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import Literal, Self, cast, overload
 
@@ -20,6 +21,7 @@ import numpy as np
 import sympy as sp
 from numpy.polynomial import Chebyshev as Cheb
 from numpy.polynomial import Legendre as Leg
+from numpy.polynomial._polybase import ABCPolyBase
 from scipy import sparse
 from scipy.integrate import quad
 
@@ -58,8 +60,9 @@ def map_expression_true_domain(u: sp.Basic, x: sp.Symbol, d: Domain, r: Domain) 
     return u
 
 
-class FunctionSpace:
-    """Base class for a 1D spectral function space of N+1 basis functions on `domain`.
+class FunctionSpace(ABC):
+    """Abstract base class for a 1D spectral function space of N+1 basis
+    functions on `domain`.
 
     Concrete subclasses provide `basis_function`/`derivative_basis_function`
     (and typically a faster `eval`/`mass_matrix`); this base class implements
@@ -76,10 +79,6 @@ class FunctionSpace:
         return self._domain
 
     @property
-    def reference_domain(self) -> Domain:
-        raise RuntimeError
-
-    @property
     def domain_factor(self) -> float:
         d = self.domain
         r = self.reference_domain
@@ -93,17 +92,22 @@ class FunctionSpace:
     def weight(self, x: sp.Symbol = x) -> sp.Expr | int:
         return 1
 
+    @abstractmethod
+    def L2_norm_sq(self, N: int) -> np.ndarray: ...
+
+    @property
+    @abstractmethod
+    def reference_domain(self) -> Domain: ...
+
     @overload
     def basis_function(self, j: int, sympy: Literal[True]) -> sp.Expr: ...
     @overload
     def basis_function(self, j: int, sympy: Literal[False] = False) -> BasisCallable: ...
-    def basis_function(self, j, sympy=False):
-        """Abstract: must be overridden by a concrete subclass; never implement this directly."""
-        raise RuntimeError
+    @abstractmethod
+    def basis_function(self, j, sympy=False): ...
 
-    def derivative_basis_function(self, j: int, k: int = 1) -> BasisCallable:
-        """Abstract: must be overridden by a concrete subclass; never implement this directly."""
-        raise RuntimeError
+    @abstractmethod
+    def derivative_basis_function(self, j: int, k: int = 1) -> BasisCallable: ...
 
     def evaluate_basis_function(self, Xj: np.ndarray, j: int) -> np.ndarray:
         return self.basis_function(j)(Xj)
@@ -125,10 +129,6 @@ class FunctionSpace:
             P[:, j] = self.evaluate_basis_function(Xj, j)
         return P
 
-    def eval_derivative_basis_function_all(self, Xj: np.ndarray, k: int = 1) -> np.ndarray:
-        """Optional: evaluate the k'th derivative of all basis functions at Xj. Not used by the demo tests."""
-        raise NotImplementedError
-
     def inner_product(self, u: sp.Expr) -> np.ndarray:
         us = map_expression_true_domain(u, x, self.domain, self.reference_domain)
         us = sp.lambdify(x, us)
@@ -149,7 +149,28 @@ class FunctionSpace:
         return assemble_generic_matrix(TrialFunction(self), TestFunction(self))
 
 
-class Legendre(FunctionSpace):
+class Polynomial(FunctionSpace):
+    """Base class for polynomial function spaces on reference domain (-1, 1)."""
+
+    @property
+    def reference_domain(self) -> Domain:
+        raise NotImplementedError
+
+    @overload
+    def basis_function(self, j: int, sympy: Literal[True]) -> sp.Expr: ...
+    @overload
+    def basis_function(self, j: int, sympy: Literal[False] = False) -> ABCPolyBase: ...
+    @abstractmethod
+    def basis_function(self, j, sympy=False): ...
+
+    def derivative_basis_function(self, j: int, k: int = 1) -> ABCPolyBase:
+        raise NotImplementedError
+
+    def mass_matrix(self) -> sparse.spmatrix:
+        raise NotImplementedError
+
+
+class Legendre(Polynomial):
     """Orthogonal Legendre polynomial space, P_0..P_N, on reference domain (-1, 1)."""
 
     def __init__(self, N: int, domain: Domain = (-1, 1)) -> None:
@@ -164,13 +185,7 @@ class Legendre(FunctionSpace):
             return sp.legendre(j, x)
         return Leg.basis(j)
 
-    def derivative_basis_function(self, j: int, k: int = 1) -> Leg:
-        return self.basis_function(j).deriv(k)
-
     def L2_norm_sq(self, N: int) -> np.ndarray:
-        raise NotImplementedError
-
-    def mass_matrix(self) -> sparse.spmatrix:
         raise NotImplementedError
 
     def eval(self, uh: np.ndarray, xj: np.ndarray | float) -> np.ndarray:
@@ -179,7 +194,7 @@ class Legendre(FunctionSpace):
         return np.polynomial.legendre.legval(Xj, uh)
 
 
-class Chebyshev(FunctionSpace):
+class Chebyshev(Polynomial):
     """Orthogonal Chebyshev polynomial space, T_0..T_N, on reference domain (-1, 1)."""
 
     def __init__(self, N: int, domain: Domain = (-1, 1)) -> None:
@@ -194,16 +209,10 @@ class Chebyshev(FunctionSpace):
             return sp.cos(j * sp.acos(x))
         return Cheb.basis(j)
 
-    def derivative_basis_function(self, j: int, k: int = 1) -> Cheb:
-        raise NotImplementedError
-
     def weight(self, x: sp.Symbol = x) -> sp.Expr:
         return 1 / sp.sqrt(1 - x**2)
 
     def L2_norm_sq(self, N: int) -> np.ndarray:
-        raise NotImplementedError
-
-    def mass_matrix(self) -> sparse.spmatrix:
         raise NotImplementedError
 
     def eval(self, uh: np.ndarray, xj: np.ndarray | float) -> np.ndarray:
@@ -240,7 +249,6 @@ class Trigonometric(FunctionSpace):
     """
 
     B: Dirichlet | Neumann
-    L2_norm_sq: Callable[[int], np.ndarray]
 
     @property
     def reference_domain(self) -> Domain:
@@ -395,7 +403,7 @@ class DirichletLegendre(Composite, Legendre):
     def __init__(self, N: int, domain: Domain = (-1, 1), bc: BC = (0, 0)) -> None:
         Legendre.__init__(self, N, domain=domain)
         self.B = Dirichlet(bc, domain, self.reference_domain)
-        self.S = sparse.diags((1, -1), (0, 2), shape=(N + 1, N + 3), format="csr")
+        self.S = sparse.diags((1., -1.), (0, 2), shape=(N + 1, N + 3), format="csr")
 
     @overload
     def basis_function(self, j: int, sympy: Literal[True]) -> sp.Expr: ...
@@ -423,7 +431,7 @@ class DirichletChebyshev(Composite, Chebyshev):
     def __init__(self, N: int, domain: Domain = (-1, 1), bc: BC = (0, 0)) -> None:
         Chebyshev.__init__(self, N, domain=domain)
         self.B = Dirichlet(bc, domain, self.reference_domain)
-        self.S = sparse.diags((1, -1), (0, 2), shape=(N + 1, N + 3), format="csr")
+        self.S = sparse.diags((1., -1.), (0, 2), shape=(N + 1, N + 3), format="csr")
 
     @overload
     def basis_function(self, j: int | sp.Symbol, sympy: Literal[True]) -> sp.Expr: ...
@@ -453,14 +461,9 @@ class BasisFunction:
     """Base for `TrialFunction`/`TestFunction`: a symbolic function in `V`, `diff`
     derivatives deep, used as an argument to `inner`."""
 
-    def __init__(self, V: FunctionSpace, diff: int = 0, argument: int = 0) -> None:
+    def __init__(self, V: FunctionSpace, diff: int = 0) -> None:
         self._V = V
         self._num_derivatives = diff
-        self._argument = argument
-
-    @property
-    def argument(self) -> int:
-        return self._argument
 
     @property
     def function_space(self) -> FunctionSpace:
@@ -477,15 +480,9 @@ class BasisFunction:
 class TestFunction(BasisFunction):
     """Test function argument to `inner`, e.g. `v = TestFunction(V)`."""
 
-    def __init__(self, V: FunctionSpace, diff: int = 0) -> None:
-        BasisFunction.__init__(self, V, diff=diff, argument=0)
-
 
 class TrialFunction(BasisFunction):
     """Trial function argument to `inner`, e.g. `u = TrialFunction(V)`; supports `u.diff(k)`."""
-
-    def __init__(self, V: FunctionSpace, diff: int = 0) -> None:
-        BasisFunction.__init__(self, V, diff=diff, argument=1)
 
 
 def assemble_generic_matrix(u: TrialFunction, v: TestFunction) -> np.ndarray:

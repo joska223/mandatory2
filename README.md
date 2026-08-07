@@ -25,22 +25,20 @@ uv run python galerkin.py
 
 ## What you need to implement
 
-`galerkin.py` marks unfinished code with two different exceptions, and they mean different things:
+`galerkin.py` marks unfinished code two different ways, and they mean different things:
 
 - **`NotImplementedError`** marks a concrete method for you to fill in — mirror the pattern of the sibling classes/methods that are already implemented.
-- **`RuntimeError`** in `FunctionSpace.basis_function` and `FunctionSpace.derivative_basis_function` marks an *abstract* method. It is never meant to be implemented at that base-class level — only overridden by a concrete subclass, which every subclass already does (directly, or via its own `NotImplementedError` blank listed below). **Leave these two `RuntimeError`s alone.**
-
-`FunctionSpace.reference_domain` also raises `RuntimeError`, but unlike the two above it genuinely is a blank for you to fill in — it's listed first below.
+- **`@abstractmethod`** (from `abc`) marks a method that's never meant to be implemented at the class where it's declared — only overridden by a concrete subclass further down the hierarchy, which every subclass eventually does (directly, or via one of the `NotImplementedError` blanks below). If you see `@abstractmethod` above a method with a bare `...` body, **leave it alone**.
 
 Implement:
-- `FunctionSpace.reference_domain` — return the default reference domain `(-1, 1)` used by the polynomial spaces below. Nothing involving `Legendre`/`Chebyshev` works until this is filled in.
-- `Legendre.L2_norm_sq` and `Legendre.mass_matrix` — the L2 norms of the Legendre polynomials and the (diagonal) mass matrix built from them.
-- `Chebyshev.derivative_basis_function`, `Chebyshev.L2_norm_sq`, `Chebyshev.mass_matrix`, `Chebyshev.eval` — the same idea as `Legendre`, but using `np.polynomial.chebyshev` and the Chebyshev weight.
+- `Polynomial.reference_domain` — return the default reference domain `(-1, 1)` shared by `Legendre` and `Chebyshev`. Nothing involving either works until this is filled in.
+- `Polynomial.derivative_basis_function` — the k'th derivative of `basis_function(j)`; both `Legendre`'s and `Chebyshev`'s basis functions are `numpy.polynomial` objects with a `.deriv(k)` method, so one implementation here covers both.
+- `Polynomial.mass_matrix` — the (diagonal) mass matrix built from `self.L2_norm_sq`, again shared by `Legendre` and `Chebyshev`.
+- `Legendre.L2_norm_sq` and `Chebyshev.L2_norm_sq` — the L2 norms of the Legendre/Chebyshev polynomials. These stay separate (unlike the three above) since the closed-form formula differs per basis.
+- `Chebyshev.eval` — mirror `Legendre.eval`, using `np.polynomial.chebyshev.chebval` instead of `legval`.
 - `Cosines` (`__init__`, `basis_function`, `derivative_basis_function`, `L2_norm_sq`) — mirror `Sines`, but with `cos(jπx)` and its `j=0` mode handled separately (its derivative vanishes identically for any order).
 - `DirichletLegendre.basis_function` — mirror `DirichletChebyshev.basis_function`, using Legendre polynomials instead of Chebyshev.
 - `NeumannLegendre` and `NeumannChebyshev` (`__init__`, `basis_function`) — composite spaces enforcing homogeneous derivative (Neumann) boundary conditions via a stencil matrix `S`, following the same pattern as `DirichletLegendre`/`DirichletChebyshev`, but solving for a stencil coefficient that makes `ψ_j'(±1) = 0`. See [lecture 11](https://matmek-4270.github.io/matmek4270-book/lecture11.html#neumann-boundary-conditions) for the boundary-derivative values to use.
-
-`FunctionSpace.eval_derivative_basis_function_all` also raises `NotImplementedError`, but it isn't called by any of the three demo tests — implement it only if you want a general way to evaluate a derivative field at many points (e.g. for plotting).
 
 ## Architecture, in brief
 
