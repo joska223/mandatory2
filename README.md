@@ -43,7 +43,7 @@ Implement:
 
 ## Architecture, in brief
 
-The module docstring and class docstrings in `galerkin.py` describe the architecture — mapping helpers, `FunctionSpace` and its orthogonal/trigonometric/composite subclasses, the `Dirichlet`/`Neumann` boundary lifts, and the `TrialFunction`/`TestFunction`/`inner` weak-form DSL. Start there (`python -c "help(__import__('galerkin'))"`, or just read top-to-bottom) before diving into the blanks above.
+The module docstring and class docstrings in `galerkin.py` describe the architecture — mapping helpers, `FunctionSpace` and its orthogonal/trigonometric/composite subclasses, the `Dirichlet`/`Neumann` boundary lifts, and the `TrialFunction`/`TestFunction`/`inner` weak-form domain-specific language (DSL). Start there (`python -c "help(__import__('galerkin'))"`, or just read top-to-bottom) before diving into the blanks above.
 
 ## Gotchas
 
