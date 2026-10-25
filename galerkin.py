@@ -154,7 +154,7 @@ class Polynomial(FunctionSpace):
 
     @property
     def reference_domain(self) -> Domain:
-        raise NotImplementedError
+        return (-1, 1)
 
     @overload
     def basis_function(self, j: int, sympy: Literal[True]) -> sp.Expr: ...
@@ -164,10 +164,11 @@ class Polynomial(FunctionSpace):
     def basis_function(self, j, sympy=False): ...
 
     def derivative_basis_function(self, j: int, k: int = 1) -> ABCPolyBase:
-        raise NotImplementedError
+        return self.basis_function(j).deriv(k)
 
     def mass_matrix(self) -> sparse.spmatrix:
-        raise NotImplementedError
+        m = self.L2_norm_sq(self.N + 1)
+        return sparse.diags(m, format ="csr")
 
 
 class Legendre(Polynomial):
@@ -186,7 +187,8 @@ class Legendre(Polynomial):
         return Leg.basis(j)
 
     def L2_norm_sq(self, N: int) -> np.ndarray:
-        raise NotImplementedError
+        j = np.arange(N)
+        return 2/(2*j + 1)
 
     def eval(self, uh: np.ndarray, xj: np.ndarray | float) -> np.ndarray:
         xj = np.atleast_1d(xj)
@@ -213,10 +215,15 @@ class Chebyshev(Polynomial):
         return 1 / sp.sqrt(1 - x**2)
 
     def L2_norm_sq(self, N: int) -> np.ndarray:
-        raise NotImplementedError
+        norm = np.ones(N)*(np.pi/2)
+        norm[0] = np.pi
+
+        return norm
 
     def eval(self, uh: np.ndarray, xj: np.ndarray | float) -> np.ndarray:
-        raise NotImplementedError
+        xj = np.atleast_1d(xj)
+        Xj = map_reference_domain(xj, self.domain, self.reference_domain)
+        return np.polynomial.chebyshev.chebval(Xj, uh)
 
     def inner_product(self, u: sp.Expr) -> np.ndarray:
         """Inner products (u, T_i), via the substitution x = cos(theta), integrating over
@@ -410,21 +417,25 @@ class DirichletLegendre(Composite, Legendre):
     @overload
     def basis_function(self, j: int, sympy: Literal[False] = False) -> Leg: ...
     def basis_function(self, j, sympy=False):
-        raise NotImplementedError
+        return Legendre.basis_function(self, j, sympy = sympy) - Legendre.basis_function(self, j+2, sympy = sympy)
 
 
 class NeumannLegendre(Composite, Legendre):
     def __init__(
         self, N: int, domain: Domain = (-1, 1), bc: BC = (0, 0), constraint: int = 0
     ) -> None:
-        raise NotImplementedError
+        Legendre.__init__(self, N, domain=domain)
+        self.B = Neumann(bc, domain, self.reference_domain)
+        j = np.arange(N+1, dtype = float)
+        c = (j(j+1))/((j+2)*(j+3))
+        self.S = sparse.diags((1., -1.), (0, 2), shape=(N + 1, N + 3), format="csr")
 
     @overload
     def basis_function(self, j: int, sympy: Literal[True]) -> sp.Expr: ...
     @overload
     def basis_function(self, j: int, sympy: Literal[False] = False) -> Leg: ...
     def basis_function(self, j, sympy=False):
-        raise NotImplementedError
+        return Legendre.basis_function(self, j, sympy = sympy) - ((j*(j+1))/((j+2)*(j+3))) * Legendre.basis_function(self, j, sympy = sympy)
 
 
 class DirichletChebyshev(Composite, Chebyshev):
