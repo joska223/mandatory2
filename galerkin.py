@@ -575,6 +575,7 @@ def L2_error(uh: np.ndarray, ue: sp.Expr, V: FunctionSpace, kind: str = "norm") 
     return np.sqrt(quad(uv, float(d[0]), float(d[1]))[0])
 
 
+
 def test_project() -> None:
     ue = sp.besselj(0, x)
     domain = (0, 10)
